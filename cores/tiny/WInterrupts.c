@@ -21,6 +21,10 @@
   Boston, MA  02111-1307  USA
   
   Modified 24 November 2006 by David A. Mellis
+
+  Modified 28-08-2009 for attiny84 R.Wiersma
+  Modified 09-10-2009 for attiny45 A.Saporetti
+  Modified 20-11-2010 - B.Cook - Correct a minor bug in attachInterrupt
 */
 
 #include <inttypes.h>
@@ -29,20 +33,38 @@
 #include <avr/pgmspace.h>
 #include <stdio.h>
 
-#include "WConstants.h"
 #include "wiring_private.h"
 
-volatile static voidFuncPtr intFunc[EXTERNAL_NUM_INTERRUPTS];
-// volatile static voidFuncPtr twiIntFunc;
+volatile static voidFuncPtr intFunc[NUMBER_EXTERNAL_INTERRUPTS];
 
-#if defined(__AVR_ATmega8__)
-#define EICRA MCUCR
-#define EIMSK GICR
+#if defined( MCUCR ) && ! defined( EICRA )
+  #define EICRA MCUCR
 #endif
 
-void attachInterrupt(uint8_t interruptNum, void (*userFunc)(void), int mode) {
-  if(interruptNum < EXTERNAL_NUM_INTERRUPTS) {
+#if defined( GIMSK ) && ! defined( EIMSK )
+  #define EIMSK GIMSK
+#endif
+
+void attachInterrupt(uint8_t interruptNum, void (*userFunc)(void), int mode) 
+{
+  if ( interruptNum < NUMBER_EXTERNAL_INTERRUPTS ) 
+  {
+    /* 
+      If attachInterrupt is called in succession for the same 
+      interruptNum but a different userFunc then the following line 
+      is not safe.  Changing intFunc is not atomic.
     intFunc[interruptNum] = userFunc;
+    */
+    {
+      // save interrupt flag
+      uint8_t SaveSREG = SREG;
+      // disable interrupts
+      cli();
+      // access the shared data
+      intFunc[interruptNum] = userFunc;
+      // restore the interrupt flag
+      SREG = SaveSREG;
+    }
     
     // Configure the interrupt mode (trigger on low input, any change, rising
     // edge, or falling edge).  The mode constants were chosen to correspond
@@ -50,166 +72,84 @@ void attachInterrupt(uint8_t interruptNum, void (*userFunc)(void), int mode) {
     // the mode into place.
       
     // Enable the interrupt.
-      
-    switch (interruptNum) {
-#if defined(__AVR_ATmega1280__)
-    case 2:
-      EICRA = (EICRA & ~((1 << ISC00) | (1 << ISC01))) | (mode << ISC00);
-      EIMSK |= (1 << INT0);
-      break;
-    case 3:
-      EICRA = (EICRA & ~((1 << ISC10) | (1 << ISC11))) | (mode << ISC10);
-      EIMSK |= (1 << INT1);
-      break;
-    case 4:
-      EICRA = (EICRA & ~((1 << ISC20) | (1 << ISC21))) | (mode << ISC20);
-      EIMSK |= (1 << INT2);
-      break;
-    case 5:
-      EICRA = (EICRA & ~((1 << ISC30) | (1 << ISC31))) | (mode << ISC30);
-      EIMSK |= (1 << INT3);
-      break;
-    case 0:
-      EICRB = (EICRB & ~((1 << ISC40) | (1 << ISC41))) | (mode << ISC40);
-      EIMSK |= (1 << INT4);
-      break;
-    case 1:
-      EICRB = (EICRB & ~((1 << ISC50) | (1 << ISC51))) | (mode << ISC50);
-      EIMSK |= (1 << INT5);
-      break;
-    case 6:
-      EICRB = (EICRB & ~((1 << ISC60) | (1 << ISC61))) | (mode << ISC60);
-      EIMSK |= (1 << INT6);
-      break;
-    case 7:
-      EICRB = (EICRB & ~((1 << ISC70) | (1 << ISC71))) | (mode << ISC70);
-      EIMSK |= (1 << INT7);
-      break;
-#else
-    case 0:
-      EICRA = (EICRA & ~((1 << ISC00) | (1 << ISC01))) | (mode << ISC00);
-      EIMSK |= (1 << INT0);
-      break;
-    case 1:
-      EICRA = (EICRA & ~((1 << ISC10) | (1 << ISC11))) | (mode << ISC10);
-      EIMSK |= (1 << INT1);
-      break;
-#endif
+
+    switch ( interruptNum )
+    {
+      #if NUMBER_EXTERNAL_INTERRUPTS >= 1
+        case EXTERNAL_INTERRUPT_0:
+          EICRA = (EICRA & ~((1 << ISC00) | (1 << ISC01))) | (mode << ISC00);
+          EIMSK |= (1 << INT0);
+          break;
+      #endif
+
+      #if NUMBER_EXTERNAL_INTERRUPTS >= 2 && !defined(ISC11)
+	  //For ATtiny861, but interrupts share the same vector.
+        case EXTERNAL_INTERRUPT_1:
+          EICRA = (EICRA & ~((1 << ISC00) | (1 << ISC01))) | (mode << ISC00);
+          EIMSK |= (1 << INT1);
+          break;
+      #endif
+
+      #if NUMBER_EXTERNAL_INTERRUPTS >= 2 && defined(ISC11)
+        case EXTERNAL_INTERRUPT_1:
+          EICRA = (EICRA & ~((1 << ISC10) | (1 << ISC11))) | (mode << ISC10);
+          EIMSK |= (1 << INT1);
+          break;
+      #endif
+
+      #if NUMBER_EXTERNAL_INTERRUPTS > 2
+      #error Add handlers for the additional interrupts.
+      #endif
     }
   }
 }
 
-void detachInterrupt(uint8_t interruptNum) {
-  if(interruptNum < EXTERNAL_NUM_INTERRUPTS) {
+void detachInterrupt(uint8_t interruptNum) 
+{
+  if ( interruptNum < NUMBER_EXTERNAL_INTERRUPTS ) 
+  {
     // Disable the interrupt.  (We can't assume that interruptNum is equal
     // to the number of the EIMSK bit to clear, as this isn't true on the 
     // ATmega8.  There, INT0 is 6 and INT1 is 7.)
-    switch (interruptNum) {
-#if defined(__AVR_ATmega1280__)
-    case 2:
-      EIMSK &= ~(1 << INT0);
-      break;
-    case 3:
-      EIMSK &= ~(1 << INT1);
-      break;
-    case 4:
-      EIMSK &= ~(1 << INT2);
-      break;
-    case 5:
-      EIMSK &= ~(1 << INT3);
-      break;
-    case 0:
-      EIMSK &= ~(1 << INT4);
-      break;
-    case 1:
-      EIMSK &= ~(1 << INT5);
-      break;
-    case 6:
-      EIMSK &= ~(1 << INT6);
-      break;
-    case 7:
-      EIMSK &= ~(1 << INT7);
-      break;
-#else
-    case 0:
-      EIMSK &= ~(1 << INT0);
-      break;
-    case 1:
-      EIMSK &= ~(1 << INT1);
-      break;
-#endif
+
+    switch (interruptNum) 
+    {
+      #if NUMBER_EXTERNAL_INTERRUPTS >= 1
+        case EXTERNAL_INTERRUPT_0:
+          EIMSK &= ~(1 << INT0);
+          break;;
+      #endif
+
+      #if NUMBER_EXTERNAL_INTERRUPTS >= 2
+        case EXTERNAL_INTERRUPT_1:
+          EIMSK &= ~(1 << INT1);
+          break;;
+      #endif
+
+      #if NUMBER_EXTERNAL_INTERRUPTS > 2
+      #error Add handlers for the additional interrupts.
+      #endif
     }
-      
     intFunc[interruptNum] = 0;
   }
 }
 
-/*
-void attachInterruptTwi(void (*userFunc)(void) ) {
-  twiIntFunc = userFunc;
+#if NUMBER_EXTERNAL_INTERRUPTS >= 1
+ISR(EXTERNAL_INTERRUPT_0_vect)
+{
+  if(intFunc[EXTERNAL_INTERRUPT_0])
+    intFunc[EXTERNAL_INTERRUPT_0]();
 }
-*/
-
-#if defined(__AVR_ATmega1280__)
-
-SIGNAL(INT0_vect) {
-  if(intFunc[EXTERNAL_INT_2])
-    intFunc[EXTERNAL_INT_2]();
-}
-
-SIGNAL(INT1_vect) {
-  if(intFunc[EXTERNAL_INT_3])
-    intFunc[EXTERNAL_INT_3]();
-}
-
-SIGNAL(INT2_vect) {
-  if(intFunc[EXTERNAL_INT_4])
-    intFunc[EXTERNAL_INT_4]();
-}
-
-SIGNAL(INT3_vect) {
-  if(intFunc[EXTERNAL_INT_5])
-    intFunc[EXTERNAL_INT_5]();
-}
-
-SIGNAL(INT4_vect) {
-  if(intFunc[EXTERNAL_INT_0])
-    intFunc[EXTERNAL_INT_0]();
-}
-
-SIGNAL(INT5_vect) {
-  if(intFunc[EXTERNAL_INT_1])
-    intFunc[EXTERNAL_INT_1]();
-}
-
-SIGNAL(INT6_vect) {
-  if(intFunc[EXTERNAL_INT_6])
-    intFunc[EXTERNAL_INT_6]();
-}
-
-SIGNAL(INT7_vect) {
-  if(intFunc[EXTERNAL_INT_7])
-    intFunc[EXTERNAL_INT_7]();
-}
-
-#else
-
-SIGNAL(INT0_vect) {
-  if(intFunc[EXTERNAL_INT_0])
-    intFunc[EXTERNAL_INT_0]();
-}
-
-SIGNAL(INT1_vect) {
-  if(intFunc[EXTERNAL_INT_1])
-    intFunc[EXTERNAL_INT_1]();
-}
-
 #endif
 
-/*
-SIGNAL(SIG_2WIRE_SERIAL) {
-  if(twiIntFunc)
-    twiIntFunc();
+#if NUMBER_EXTERNAL_INTERRUPTS >= 2
+ISR(EXTERNAL_INTERRUPT_1_vect)
+{
+  if(intFunc[EXTERNAL_INTERRUPT_1])
+    intFunc[EXTERNAL_INTERRUPT_1]();
 }
-*/
+#endif
 
+#if NUMBER_EXTERNAL_INTERRUPTS > 2
+#error Add handlers for the additional interrupts.
+#endif

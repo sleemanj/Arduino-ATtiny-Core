@@ -165,7 +165,7 @@ String & String::copy(const char *cstr, unsigned int length)
 
 String & String::copy(const __FlashStringHelper *pgmstr)
 {
-	unsigned int length = strlen_P((const prog_char *)pgmstr);
+	unsigned int length = strlen_P((const char PROGMEM *)pgmstr);
 	if (!reserve(length)) {
 		if (buffer) {
 			free(buffer);
@@ -175,7 +175,7 @@ String & String::copy(const __FlashStringHelper *pgmstr)
 		return *this;
 	}
 	len = length;
-	strcpy_P(buffer, (const prog_char *)pgmstr);
+	strcpy_P(buffer, (const char PROGMEM *)pgmstr);
 	return *this;
 }
 
@@ -269,10 +269,10 @@ String & String::append(const char *cstr)
 
 String & String::append(const __FlashStringHelper *pgmstr)
 {
-	unsigned int length = strlen_P((const prog_char *)pgmstr);
+	unsigned int length = strlen_P((const char PROGMEM *)pgmstr);
 	unsigned int newlen = len + length;
 	if (length == 0 || !reserve(newlen)) return *this;
-	strcpy_P(buffer + len, (const prog_char *)pgmstr);
+	strcpy_P(buffer + len, (const char PROGMEM *)pgmstr);
 	len = newlen;
 	return *this;
 }
@@ -414,7 +414,7 @@ unsigned char String::equals(const char *cstr) const
 unsigned char String::equals(const __FlashStringHelper *pgmstr) const
 {
 	if (len == 0) return pgm_read_byte(pgmstr) == 0;
-	return strcmp_P(buffer, (const prog_char *)pgmstr) == 0;
+	return strcmp_P(buffer, (const char PROGMEM *)pgmstr) == 0;
 }
 
 unsigned char String::operator<(const String &rhs) const
@@ -546,7 +546,7 @@ int String::lastIndexOf( char theChar ) const
 	return lastIndexOf(theChar, len - 1);
 }
 
-int String::lastIndexOf(char ch, int fromIndex) const
+int String::lastIndexOf(char ch, unsigned int fromIndex) const
 {
 	if (fromIndex >= len || fromIndex < 0) return -1;
 	char tempchar = buffer[fromIndex + 1];
@@ -562,7 +562,7 @@ int String::lastIndexOf(const String &s2) const
 	return lastIndexOf(s2, len - s2.len);
 }
 
-int String::lastIndexOf(const String &s2, int fromIndex) const
+int String::lastIndexOf(const String &s2, unsigned int fromIndex) const
 {
   	if (s2.len == 0 || len == 0 || s2.len > len || fromIndex < 0) return -1;
 	if (fromIndex >= len) fromIndex = len - 1;
@@ -570,7 +570,7 @@ int String::lastIndexOf(const String &s2, int fromIndex) const
 	for (char *p = buffer; p <= buffer + fromIndex; p++) {
 		p = strstr(p, s2.buffer);
 		if (!p) break;
-		if (p - buffer <= fromIndex) found = p - buffer;
+		if ((unsigned int)(p - buffer) <= fromIndex) found = p - buffer;
 	}
 	return found;
 }
@@ -642,7 +642,7 @@ String & String::replace(const String& find, const String& replace)
 		if (size == len) return *this;
 		if (size > capacity && !changeBuffer(size)) return *this;
 		int index = len - 1;
-		while ((index = lastIndexOf(find, index)) >= 0) {
+		while (index >= 0 && (index = lastIndexOf(find, index)) >= 0) {
 			readFrom = buffer + index + find.len;
 			memmove(readFrom + diff, readFrom, len - (readFrom - buffer));
 			len += diff;

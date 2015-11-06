@@ -112,6 +112,15 @@ public:
 	friend StringSumHelper & operator + (const StringSumHelper &lhs, unsigned int num);
 	friend StringSumHelper & operator + (const StringSumHelper &lhs, long num);
 	friend StringSumHelper & operator + (const StringSumHelper &lhs, unsigned long num);
+	String & concat(const String &str)		{return append(str);}
+	String & concat(const char *cstr)		{return append(cstr);}
+	String & concat(const __FlashStringHelper *pgmstr) {return append(pgmstr);}
+	String & concat(char c)				{return append(c);}
+	String & concat(unsigned char c)		{return append((char)c);}
+	String & concat(int num)			{return append(num);}
+	String & concat(unsigned int num)		{return append(num);}
+	String & concat(long num)			{return append(num);}
+	String & concat(unsigned long num)		{return append(num);}
 
 	// comparison
 	int compareTo(const String &s) const;
@@ -148,9 +157,9 @@ public:
 	int indexOf( const String &str ) const;
 	int indexOf( const String &str, unsigned int fromIndex ) const;
 	int lastIndexOf( char ch ) const;
-	int lastIndexOf( char ch, int fromIndex ) const;
+	int lastIndexOf( char ch, unsigned int fromIndex ) const;
 	int lastIndexOf( const String &str ) const;
-	int lastIndexOf( const String &str, int fromIndex ) const;
+	int lastIndexOf( const String &str, unsigned int fromIndex ) const;
 	String substring( unsigned int beginIndex ) const;
 	String substring( unsigned int beginIndex, unsigned int endIndex ) const;
 

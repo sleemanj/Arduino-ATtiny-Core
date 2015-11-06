@@ -49,7 +49,7 @@ class HardwareSerial : public Stream
       volatile uint8_t *ucsra, volatile uint8_t *ucsrb,
       volatile uint8_t *udr,
       uint8_t rxen, uint8_t txen, uint8_t rxcie, uint8_t udrie, uint8_t u2x);
-    void begin(unsigned long);
+    void begin(long);
     void end();
     virtual int available(void);
     virtual int peek(void);
@@ -60,22 +60,11 @@ class HardwareSerial : public Stream
     operator bool();
 };
 
-#if defined(UBRRH) || defined(UBRR0H)
+#if (defined(UBRRH) || defined(UBRR0H)) && !USE_SOFTWARE_SERIAL
   extern HardwareSerial Serial;
-#elif defined(USBCON)
-  #include "USBAPI.h"
-//  extern HardwareSerial Serial_;  
 #endif
 #if defined(UBRR1H)
   extern HardwareSerial Serial1;
 #endif
-#if defined(UBRR2H)
-  extern HardwareSerial Serial2;
-#endif
-#if defined(UBRR3H)
-  extern HardwareSerial Serial3;
-#endif
-
-extern void serialEventRun(void) __attribute__((weak));
 
 #endif

@@ -20,160 +20,169 @@
   Boston, MA  02111-1307  USA
 
   $Id: wiring.c 248 2007-02-03 15:36:30Z mellis $
+
+  Modified  28-08-2009 for attiny84 R.Wiersma
+  Modified  14-10-2009 for attiny45 Saposoft
+  Corrected 17-05-2010 for ATtiny84 B.Cook
 */
 
 #include "wiring_private.h"
 #include "pins_arduino.h"
 
+#ifndef DEFAULT
+//For those with no ADC, need to define default.
+#define DEFAULT (0)
+#endif
+
 uint8_t analog_reference = DEFAULT;
 
 void analogReference(uint8_t mode)
 {
-	// can't actually set the register here because the default setting
-	// will connect AVCC and the AREF pin, which would cause a short if
-	// there's something connected to AREF.
-	analog_reference = mode;
+  // can't actually set the register here because the default setting
+  // will connect AVCC and the AREF pin, which would cause a short if
+  // there's something connected to AREF.
+  // fix? Validate the mode?
+  analog_reference = mode;
 }
 
 int analogRead(uint8_t pin)
 {
-	uint8_t low, high;
-
-	// set the analog reference (high two bits of ADMUX) and select the
-	// channel (low 4 bits).  this also sets ADLAR (left-adjust result)
-	// to 0 (the default).
-	ADMUX = (analog_reference << 6) | (pin & 0x07);
+  #if defined( NUM_DIGITAL_PINS )
+  if ( pin >= NUM_DIGITAL_PINS ) pin -= NUM_DIGITAL_PINS; // allow for channel or pin numbers
+  #endif
   
-#if defined(__AVR_ATmega1280__)
-	// the MUX5 bit of ADCSRB selects whether we're reading from channels
-	// 0 to 7 (MUX5 low) or 8 to 15 (MUX5 high).
-	ADCSRB = (ADCSRB & ~(1 << MUX5)) | (((pin >> 3) & 0x01) << MUX5);
-#endif
+  // fix? Validate pin?
+  if(pin >= NUM_ANALOG_INPUTS) return 0; //Not a valid pin.
+  #ifndef ADCSRA
+  return digitalRead(analogInputToDigitalPin(pin)) ? 1023 : 0; //No ADC, so read as a digital pin instead.
+  #endif
+  
+  #if defined(ADMUX)
+  ADMUX = ((analog_reference & 0x03) << REFS0) | ((pin & 0x07) << MUX0); //select the channel and reference
+  #endif
+  #if defined(REFS2)
+  ADMUX |= (((analog_reference & 0x04) >> 2) << REFS2); //some have an extra reference bit in a weird position.
+  #endif
+  
+  #if defined(HAVE_ADC) && HAVE_ADC
+  sbi(ADCSRA, ADSC); //Start conversion
 
-	// without a delay, we seem to read from the wrong channel
-	//delay(1);
+  while(ADCSRA & (1<<ADSC)); //Wait for conversion to complete.
 
-	// start the conversion
-	sbi(ADCSRA, ADSC);
-
-	// ADSC is cleared when the conversion finishes
-	while (bit_is_set(ADCSRA, ADSC));
-
-	// we have to read ADCL first; doing so locks both ADCL
-	// and ADCH until ADCH is read.  reading ADCL second would
-	// cause the results of each conversion to be discarded,
-	// as ADCL and ADCH would be locked when it completed.
-	low = ADCL;
-	high = ADCH;
-
-	// combine the two bytes
-	return (high << 8) | low;
+  uint8_t low = ADCL;
+  uint8_t high = ADCH;
+  return (high << 8) | low;
+  #else
+  return LOW;
+  #endif
 }
-
 // Right now, PWM output only works on the pins with
 // hardware support.  These are defined in the appropriate
 // pins_*.c file.  For the rest of the pins, we default
 // to digital output.
 void analogWrite(uint8_t pin, int val)
 {
-	// We need to make sure the PWM output is enabled for those pins
-	// that support it, as we turn it off when digitally reading or
-	// writing with them.  Also, make sure the pin is in output mode
-	// for consistenty with Wiring, which doesn't require a pinMode
-	// call for the analog output pins.
-	pinMode(pin, OUTPUT);
-	
-	if (digitalPinToTimer(pin) == TIMER1A) {
+  // We need to make sure the PWM output is enabled for those pins
+  // that support it, as we turn it off when digitally reading or
+  // writing with them.  Also, make sure the pin is in output mode
+  // for consistenty with Wiring, which doesn't require a pinMode
+  // call for the analog output pins.
+  pinMode(pin, OUTPUT);
+
+  if (val <= 0)
+  {
+    digitalWrite(pin, LOW);
+  }
+  else if (val >= 255)
+  {
+    digitalWrite(pin, HIGH);
+  }
+  else
+  {
+    uint8_t timer = digitalPinToTimer(pin);
+	#if defined(TCCR0A) && defined(COM0A1)
+	if( timer == TIMER0A){
+		// connect pwm to pin on timer 0, channel A
+		sbi(TCCR0A, COM0A1);
+		cbi(TCCR0A, COM0A0);
+		OCR0A = val; // set pwm duty
+	} else
+	#endif
+
+	#if defined(TCCR0A) && defined(COM0B1)
+	if( timer == TIMER0B){
+		// connect pwm to pin on timer 0, channel B
+		sbi(TCCR0A, COM0B1);
+		cbi(TCCR0A, COM0B0);
+		OCR0B = val; // set pwm duty
+	} else
+	#endif
+
+	#if defined(TCCR1A) && defined(COM1A1) && !defined(TCCR1E)
+	if( timer == TIMER1A){
 		// connect pwm to pin on timer 1, channel A
 		sbi(TCCR1A, COM1A1);
-		// set pwm duty
-		OCR1A = val;
-	} else if (digitalPinToTimer(pin) == TIMER1B) {
+		cbi(TCCR1A, COM1A0);
+		OCR1A = val; // set pwm duty
+	} else
+	#endif
+
+	#if defined(TCCR1E)
+	if( timer == TIMER1A){
+		// connect pwm to pin on timer 1, channel A
+		cbi(TCCR1C,COM1A1S);
+		sbi(TCCR1C,COM1A0S);
+		OCR1A = val; // set pwm duty
+	} else if (timer == TIMER1B){
+		// connect pwm to pin on timer 1, channel A
+		cbi(TCCR1C,COM1B1S);
+		sbi(TCCR1C,COM1B0S);
+		OCR1B = val; // set pwm duty
+	} else if (timer == TIMER1D){
+		// connect pwm to pin on timer 1, channel A
+		cbi(TCCR1C,COM1D1);
+		sbi(TCCR1C,COM1D0);
+		OCR1D = val; // set pwm duty
+	} else
+	#endif
+
+	#if defined(TCCR1) && defined(COM1A1)
+	if(timer == TIMER1A){
+		// connect pwm to pin on timer 1, channel A
+		sbi(TCCR1, COM1A1);
+		cbi(TCCR1, COM1A0);
+		OCR1A = val; // set pwm duty
+	} else
+	#endif
+
+	#if defined(TCCR1A) && defined(COM1B1) && !defined(TCCR1E)
+	if( timer == TIMER1B){
 		// connect pwm to pin on timer 1, channel B
 		sbi(TCCR1A, COM1B1);
-		// set pwm duty
-		OCR1B = val;
-#if defined(__AVR_ATmega8__)
-	} else if (digitalPinToTimer(pin) == TIMER2) {
-		// connect pwm to pin on timer 2, channel B
-		sbi(TCCR2, COM21);
-		// set pwm duty
-		OCR2 = val;
-#else
-	} else if (digitalPinToTimer(pin) == TIMER0A) {
-		if (val == 0) {
-			digitalWrite(pin, LOW);
-		} else {
-			// connect pwm to pin on timer 0, channel A
-			sbi(TCCR0A, COM0A1);
-			// set pwm duty
-			OCR0A = val;      
-		}
-	} else if (digitalPinToTimer(pin) == TIMER0B) {
-		if (val == 0) {
-			digitalWrite(pin, LOW);
-		} else {
-			// connect pwm to pin on timer 0, channel B
-			sbi(TCCR0A, COM0B1);
-			// set pwm duty
-			OCR0B = val;
-		}
-	} else if (digitalPinToTimer(pin) == TIMER2A) {
-		// connect pwm to pin on timer 2, channel A
-		sbi(TCCR2A, COM2A1);
-		// set pwm duty
-		OCR2A = val;	
-	} else if (digitalPinToTimer(pin) == TIMER2B) {
-		// connect pwm to pin on timer 2, channel B
-		sbi(TCCR2A, COM2B1);
-		// set pwm duty
-		OCR2B = val;
-#endif
-#if defined(__AVR_ATmega1280__)
-	// XXX: need to handle other timers here
-	} else if (digitalPinToTimer(pin) == TIMER3A) {
-		// connect pwm to pin on timer 3, channel A
-		sbi(TCCR3A, COM3A1);
-		// set pwm duty
-		OCR3A = val;
-	} else if (digitalPinToTimer(pin) == TIMER3B) {
-		// connect pwm to pin on timer 3, channel B
-		sbi(TCCR3A, COM3B1);
-		// set pwm duty
-		OCR3B = val;
-	} else if (digitalPinToTimer(pin) == TIMER3C) {
-		// connect pwm to pin on timer 3, channel C
-		sbi(TCCR3A, COM3C1);
-		// set pwm duty
-		OCR3C = val;
-	} else if (digitalPinToTimer(pin) == TIMER4A) {
-		// connect pwm to pin on timer 4, channel A
-		sbi(TCCR4A, COM4A1);
-		// set pwm duty
-		OCR4A = val;
-	} else if (digitalPinToTimer(pin) == TIMER4B) {
-		// connect pwm to pin on timer 4, channel B
-		sbi(TCCR4A, COM4B1);
-		// set pwm duty
-		OCR4B = val;
-	} else if (digitalPinToTimer(pin) == TIMER4C) {
-		// connect pwm to pin on timer 4, channel C
-		sbi(TCCR4A, COM4C1);
-		// set pwm duty
-		OCR4C = val;
-	} else if (digitalPinToTimer(pin) == TIMER5A) {
-		// connect pwm to pin on timer 5, channel A
-		sbi(TCCR5A, COM5A1);
-		// set pwm duty
-		OCR5A = val;
-	} else if (digitalPinToTimer(pin) == TIMER5B) {
-		// connect pwm to pin on timer 5, channel B
-		sbi(TCCR5A, COM5B1);
-		// set pwm duty
-		OCR5B = val;
-#endif
-	} else if (val < 128)
-		digitalWrite(pin, LOW);
-	else
-		digitalWrite(pin, HIGH);
+		cbi(TCCR1A, COM1B0);
+		OCR1B = val; // set pwm duty
+	} else
+	#endif
+
+	#if defined(TCCR1) && defined(COM1B1)
+	if( timer == TIMER1B){
+		// connect pwm to pin on timer 1, channel B
+		sbi(GTCCR, COM1B1);
+		cbi(GTCCR, COM1B0);
+		OCR1B = val; // set pwm duty
+	} else
+	#endif
+	
+    {
+      if (val < 128)
+      {
+        digitalWrite(pin, LOW);
+      }
+      else
+      {
+        digitalWrite(pin, HIGH);
+      }
+    }
+
+  }
 }

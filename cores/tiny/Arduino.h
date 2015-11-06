@@ -20,6 +20,7 @@ extern "C"{
 
 #define INPUT 0x0
 #define OUTPUT 0x1
+#define INPUT_PULLUP 0x2
 
 #define true 0x1
 #define false 0x0
@@ -40,15 +41,6 @@ extern "C"{
 #define FALLING 2
 #define RISING 3
 
-#if defined(__AVR_ATmega1280__) || defined(__AVR_ATmega2560__)
-#define INTERNAL1V1 2
-#define INTERNAL2V56 3
-#else
-#define INTERNAL 3
-#endif
-#define DEFAULT 1
-#define EXTERNAL 0
-
 // undefine stdlib's abs if encountered
 #ifdef abs
 #undef abs
@@ -66,7 +58,19 @@ extern "C"{
 #define interrupts() sei()
 #define noInterrupts() cli()
 
+#if F_CPU < 1000000L
+//Prevent a divide by 0 is 
+#warning Clocks per microsecond < 1. To prevent divide by 0, it is rounded up to 1.
+static inline unsigned long clockCyclesPerMicrosecond() __attribute__ ((always_inline));
+static inline unsigned long clockCyclesPerMicrosecond()
+{
+//Inline function will be optimised out.
+  return 1;
+}
+#else
 #define clockCyclesPerMicrosecond() ( F_CPU / 1000000L )
+#endif
+
 #define clockCyclesToMicroseconds(a) ( ((a) * 1000L) / (F_CPU / 1000L) )
 #define microsecondsToClockCycles(a) ( ((a) * (F_CPU / 1000L)) / 1000L )
 
@@ -86,6 +90,7 @@ typedef unsigned int word;
 typedef uint8_t boolean;
 typedef uint8_t byte;
 
+void initToneTimer(void);
 void init(void);
 
 void pinMode(uint8_t, uint8_t);
@@ -115,14 +120,11 @@ void loop(void);
 
 #define analogInPinToBit(P) (P)
 
-// On the ATmega1280, the addresses of some of the port registers are
-// greater than 255, so we can't store them in uint8_t's.
 extern const uint16_t PROGMEM port_to_mode_PGM[];
 extern const uint16_t PROGMEM port_to_input_PGM[];
 extern const uint16_t PROGMEM port_to_output_PGM[];
 
 extern const uint8_t PROGMEM digital_pin_to_port_PGM[];
-// extern const uint8_t PROGMEM digital_pin_to_bit_PGM[];
 extern const uint8_t PROGMEM digital_pin_to_bit_mask_PGM[];
 extern const uint8_t PROGMEM digital_pin_to_timer_PGM[];
 
@@ -142,24 +144,71 @@ extern const uint8_t PROGMEM digital_pin_to_timer_PGM[];
 #define NOT_A_PIN 0
 #define NOT_A_PORT 0
 
+#define PA 1
+#define PB 2
+#define PC 3
+#define PD 4
+
 #define NOT_ON_TIMER 0
 #define TIMER0A 1
 #define TIMER0B 2
 #define TIMER1A 3
 #define TIMER1B 4
-#define TIMER2  5
-#define TIMER2A 6
-#define TIMER2B 7
+#define TIMER1D 5
 
-#define TIMER3A 8
-#define TIMER3B 9
-#define TIMER3C 10
-#define TIMER4A 11
-#define TIMER4B 12
-#define TIMER4C 13
-#define TIMER5A 14
-#define TIMER5B 15
-#define TIMER5C 16
+#include "pins_arduino.h"
+
+#ifndef USE_SOFTWARE_SERIAL
+//Default to hardware serial.
+#define USE_SOFTWARE_SERIAL 0
+#endif
+
+/*=============================================================================
+  Allow the ADC to be optional for low-power applications
+=============================================================================*/
+
+#ifndef TIMER_TO_USE_FOR_MILLIS
+#define TIMER_TO_USE_FOR_MILLIS                     0
+#endif
+/*
+  Tone goes on whichever timer was not used for millis.
+*/
+#if TIMER_TO_USE_FOR_MILLIS == 1
+#define TIMER_TO_USE_FOR_TONE                     0
+#else
+#define TIMER_TO_USE_FOR_TONE                     1
+#endif
+
+#if NUM_ANALOG_INPUTS > 0
+	#define HAVE_ADC    						  1
+	#ifndef INITIALIZE_ANALOG_TO_DIGITAL_CONVERTER 
+		#define INITIALIZE_ANALOG_TO_DIGITAL_CONVERTER   1
+	#endif
+#else
+	#define HAVE_ADC 							  0
+	#if defined(INITIALIZE_ANALOG_TO_DIGITAL_CONVERTER)
+		#undef INITIALIZE_ANALOG_TO_DIGITAL_CONVERTER
+	#endif
+	#define INITIALIZE_ANALOG_TO_DIGITAL_CONVERTER  0
+#endif
+
+#if !HAVE_ADC
+  #undef INITIALIZE_ANALOG_TO_DIGITAL_CONVERTER
+  #define INITIALIZE_ANALOG_TO_DIGITAL_CONVERTER  0
+#else
+  #ifndef INITIALIZE_ANALOG_TO_DIGITAL_CONVERTER 
+    #define INITIALIZE_ANALOG_TO_DIGITAL_CONVERTER   1
+  #endif
+#endif
+
+/*=============================================================================
+  Allow the "secondary timers" to be optional for low-power applications
+=============================================================================*/
+
+#ifndef INITIALIZE_SECONDARY_TIMERS
+  #define INITIALIZE_SECONDARY_TIMERS               1
+#endif
+
 
 #ifdef __cplusplus
 } // extern "C"
@@ -169,6 +218,7 @@ extern const uint8_t PROGMEM digital_pin_to_timer_PGM[];
 #include "WCharacter.h"
 #include "WString.h"
 #include "HardwareSerial.h"
+#include "TinySoftwareSerial.h"
 
 uint16_t makeWord(uint16_t w);
 uint16_t makeWord(byte h, byte l);
@@ -178,7 +228,7 @@ uint16_t makeWord(byte h, byte l);
 unsigned long pulseIn(uint8_t pin, uint8_t state, unsigned long timeout = 1000000L);
 
 void tone(uint8_t _pin, unsigned int frequency, unsigned long duration = 0);
-void noTone(uint8_t _pin);
+void noTone(uint8_t _pin = 255);
 
 // WMath prototypes
 long random(long);
@@ -188,6 +238,33 @@ long map(long, long, long, long, long);
 
 #endif
 
-#include "pins_arduino.h"
+/*=============================================================================
+  Aliases for the interrupt service routine vector numbers so the code 
+  doesn't have to be riddled with #ifdefs.
+=============================================================================*/
+
+#if defined( TIM0_COMPA_vect ) && ! defined( TIMER0_COMPA_vect )
+#define TIMER0_COMPA_vect TIM0_COMPA_vect
+#endif
+
+#if defined( TIM0_COMPB_vect ) && ! defined( TIMER0_COMPB_vect )
+#define TIMER0_COMPB_vect TIM0_COMPB_vect
+#endif
+
+#if defined( TIM0_OVF_vect ) && ! defined( TIMER0_OVF_vect )
+#define TIMER0_OVF_vect TIM0_OVF_vect
+#endif
+
+#if defined( TIM1_COMPA_vect ) && ! defined( TIMER1_COMPA_vect )
+#define TIMER1_COMPA_vect TIM1_COMPA_vect
+#endif
+
+#if defined( TIM1_COMPB_vect ) && ! defined( TIMER1_COMPB_vect )
+#define TIMER1_COMPB_vect TIM1_COMPB_vect
+#endif
+
+#if defined( TIM1_OVF_vect ) && ! defined( TIMER1_OVF_vect )
+#define TIMER1_OVF_vect TIM1_OVF_vect
+#endif
 
 #endif

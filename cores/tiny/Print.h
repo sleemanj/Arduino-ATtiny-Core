@@ -15,6 +15,11 @@
   You should have received a copy of the GNU Lesser General Public
   License along with this library; if not, write to the Free Software
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
+
+  Modified 20-11-2010 by B.Cook ...
+
+    http://arduiniana.org/libraries/flash/
+    Printable support thanks to Mikal Hart
 */
 
 #ifndef Print_h
@@ -24,12 +29,37 @@
 #include <stdio.h> // for size_t
 
 #include "WString.h"
-#include "Printable.h"
 
 #define DEC 10
 #define HEX 16
 #define OCT 8
+#ifdef BIN
+#define ABIN BIN
+//One of the ATtiny84 registers has a bit called BIN, so rename it to avoid compiler warnings. 
+#undef BIN
+#endif
 #define BIN 2
+
+#define ARDUINO_CORE_PRINTABLE_SUPPORT
+
+class Print;
+
+/* Printable...*/
+
+class _Printable
+{
+public:
+  virtual void print(Print &stream) const = 0;
+};
+
+/* ...Printable */
+    
+typedef struct
+{
+  char c;
+}
+fstr_t;
+
 
 class Print
 {
@@ -49,7 +79,7 @@ class Print
     size_t write(const char *str) { return write((const uint8_t *)str, strlen(str)); }
     virtual size_t write(const uint8_t *buffer, size_t size);
     
-    size_t print(const __FlashStringHelper *);
+    size_t print(fstr_t*);
     size_t print(const String &);
     size_t print(const char[]);
     size_t print(char);
@@ -57,11 +87,11 @@ class Print
     size_t print(int, int = DEC);
     size_t print(unsigned int, int = DEC);
     size_t print(long, int = DEC);
+    size_t print(long long, int = DEC);
     size_t print(unsigned long, int = DEC);
     size_t print(double, int = 2);
-    size_t print(const Printable&);
 
-    size_t println(const __FlashStringHelper *);
+    size_t println(fstr_t*);
     size_t println(const String &s);
     size_t println(const char[]);
     size_t println(char);
@@ -69,9 +99,9 @@ class Print
     size_t println(int, int = DEC);
     size_t println(unsigned int, int = DEC);
     size_t println(long, int = DEC);
+    size_t println(long long, int = DEC);
     size_t println(unsigned long, int = DEC);
     size_t println(double, int = 2);
-    size_t println(const Printable&);
     size_t println(void);
 };
 
