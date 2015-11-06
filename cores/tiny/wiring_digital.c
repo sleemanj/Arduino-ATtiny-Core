@@ -87,6 +87,9 @@ static void turnOffPWM(uint8_t timer)
 	if(timer == TIMER1A){
 		cbi(TCCR1, COM1A1);
 		cbi(TCCR1, COM1A0);
+	#ifdef OC1AX
+		cbi(TCCR1D, OC1AX);
+	#endif
 	} else
 	#endif
 
@@ -94,6 +97,9 @@ static void turnOffPWM(uint8_t timer)
 	if( timer == TIMER1B){
 		cbi(TCCR1A, COM1B1);
 		cbi(TCCR1A, COM1B0);
+	#ifdef OC1BV
+		cbi(TCCR1D, OC1BV);
+	#endif
 	} else
 	#endif
 
@@ -103,6 +109,7 @@ static void turnOffPWM(uint8_t timer)
 		cbi(GTCCR, COM1B0);
 	} else
 	#endif
+	
     {
     }
 
