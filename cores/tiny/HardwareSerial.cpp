@@ -51,7 +51,7 @@ struct ring_buffer
   byte tail;
 };
 
-#if defined(UBRRH) || defined(UBRR0H)
+#if defined(UBRRH) || defined(UBRR0H) || defined(LINCR)
   ring_buffer rx_buffer  =  { { 0 }, 0, 0 };
   ring_buffer tx_buffer  =  { { 0 }, 0, 0 };
 #endif
@@ -131,7 +131,7 @@ inline void store_char(unsigned char c, ring_buffer *buffer)
         store_char(c, &rx_buffer);
     }
     if(LINSIR & _BV(LTXOK)){
-      PINA |= _BV(PINA5);
+      //PINA |= _BV(PINA5); //debug
       if (tx_buffer.head == tx_buffer.tail) {
       // Buffer empty, so disable interrupts
         cbi(LINENIR,LENTXOK);
@@ -177,6 +177,7 @@ ISR(USART0_UDRE_vect)
 #elif defined(USART_UDRE_vect)
 ISR(USART_UDRE_vect)
 #endif
+#if !defined(LIN_TC_vect)
 {
   if (tx_buffer.head == tx_buffer.tail) {
 	// Buffer empty, so disable interrupts
@@ -185,8 +186,7 @@ ISR(USART_UDRE_vect)
 #else
     cbi(UCSRB, UDRIE);
 #endif
-  }
-  else {
+  } else {
     // There is more data in the output buffer. Send the next byte
     unsigned char c = tx_buffer.buffer[tx_buffer.tail];
     tx_buffer.tail = (tx_buffer.tail + 1) % SERIAL_BUFFER_SIZE;
@@ -200,6 +200,7 @@ ISR(USART_UDRE_vect)
   #endif
   }
 }
+#endif
 #endif
 
 #ifdef USART1_UDRE_vect
@@ -222,9 +223,9 @@ ISR(USART1_UDRE_vect)
 
 // Constructors ////////////////////////////////////////////////////////////////
 
-HardwareSerial::HardwareSerial(ring_buffer *rx_buffer, ring_buffer *tx_buffer,
+HardwareSerial::HardwareSerial(ring_buffer *rx_buffer, ring_buffer *tx_buffer
 #if ( defined(UBRRH) || defined(UBRR0H) || defined(UBRR1H))
-  volatile uint8_t *ubrrh, volatile uint8_t *ubrrl,
+  ,volatile uint8_t *ubrrh, volatile uint8_t *ubrrl,
   volatile uint8_t *ucsra, volatile uint8_t *ucsrb,
   volatile uint8_t *udr,
   uint8_t rxen, uint8_t txen, uint8_t rxcie, uint8_t udrie, uint8_t u2x)
@@ -243,7 +244,7 @@ HardwareSerial::HardwareSerial(ring_buffer *rx_buffer, ring_buffer *tx_buffer,
   _u2x = u2x;
 }
 #else
-  )
+)
 {
   _rx_buffer = rx_buffer;
   _tx_buffer = tx_buffer;

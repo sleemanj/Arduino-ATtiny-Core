@@ -25,7 +25,8 @@
 #ifndef Pins_Arduino_h
 #define Pins_Arduino_h
 
-#define ATTINYX5 1
+#define ATTINYX5 1       //backwards compatibility
+#define __AVR_ATtinyX5__ //this is recommended way
 #define USE_SOFTWARE_SPI 1
 
 #include <avr/pgmspace.h>
@@ -116,8 +117,8 @@ static const uint8_t A3 = NUM_DIGITAL_PINS+3;
 //                           +-\/-+
 //  Ain0       (D  5)  PB5  1|    |8   VCC
 //  Ain3       (D  3)  PB3  2|    |7   PB2  (D  2)  INT0  Ain1
-//  Ain2       (D  4)  PB4  3|    |6   PB1  (D  1)        pwm1
-//                     GND  4|    |5   PB0  (D  0)        pwm0
+//  PWM  Ain2  (D  4)  PB4  3|    |6   PB1  (D  1)        PWM (OC0B)
+//  OC1B               GND  4|    |5   PB0  (D  0)        PWM (OC0A)
 //                           +----+
 
 // these arrays map port names (e.g. port B) to the
@@ -172,7 +173,7 @@ const uint8_t PROGMEM digital_pin_to_timer_PGM[] =
 	TIMER0B, /* OC0B */
 	NOT_ON_TIMER,
 	NOT_ON_TIMER,
-	TIMER1B,
+	TIMER1B, /*OC1B*/
 	NOT_ON_TIMER,
 };
 

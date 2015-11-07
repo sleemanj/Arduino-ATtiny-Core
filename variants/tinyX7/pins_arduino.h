@@ -25,7 +25,8 @@
 #ifndef Pins_Arduino_h
 #define Pins_Arduino_h
 
-#define ATTINYX7 1
+#define ATTINYX7 1       //backwards compat
+#define __AVR_ATtinyX7__ //recommended
 
 #include <avr/pgmspace.h>
 
@@ -33,15 +34,15 @@
 #define NUM_ANALOG_INPUTS           11
 #define analogInputToDigitalPin(p)  ((p < 8) ? 10 -(p): -1)
 
-#define digitalPinHasPWM(p)         ((p) == 2 || (p) == 3 || (p) == 4 || (p) == 5)
+#define digitalPinHasPWM(p)         ((p) == 2 || (p) == 7 || (p) == 12)
 
 #define SS   10
 #define MOSI 11
 #define MISO 12
 #define SCK  13
 
-static const uint8_t SDA = 4;
-static const uint8_t SCL = 6;
+#define SDA 13
+#define SCL 11
 
 //Ax constants cannot be used for digitalRead/digitalWrite/analogWrite functions, only analogRead().
 static const uint8_t A0 = NUM_DIGITAL_PINS;
@@ -52,6 +53,9 @@ static const uint8_t A4 = NUM_DIGITAL_PINS+4;
 static const uint8_t A5 = NUM_DIGITAL_PINS+5;
 static const uint8_t A6 = NUM_DIGITAL_PINS+6;
 static const uint8_t A7 = NUM_DIGITAL_PINS+7;
+static const uint8_t A8 = NUM_DIGITAL_PINS+8;
+static const uint8_t A9 = NUM_DIGITAL_PINS+9;
+static const uint8_t A10 = NUM_DIGITAL_PINS+10;
 
 //----------------------------------------------------------
 //----------------------------------------------------------
@@ -101,7 +105,7 @@ static const uint8_t A7 = NUM_DIGITAL_PINS+7;
 
 
 
-#define digitalPinToPCICR(p)    (((p) >= 0 && (p) <= 10) ? (&GIMSK) : ((uint8_t *)NULL))
+#define digitalPinToPCICR(p)    (((p) >= 0 && (p) <= 10) ? (&PCICR) : ((uint8_t *)NULL))
 #define digitalPinToPCICRbit(p) (((p) >= 3 && (p) <= 10) ? 4 : 5)
 #define digitalPinToPCMSK(p)    (((p) >= 3 && (p) <= 10) ? (&PCMSK0) : (((p) >= 0 && (p) <= 2) ? (&PCMSK1) : ((uint8_t *)NULL)))
 #define digitalPinToPCMSKbit(p) (((p) >= 3 && (p) <= 10) ? (10 - (p)) : (p))
@@ -207,7 +211,7 @@ const uint8_t PROGMEM digital_pin_to_timer_PGM[] =
 	NOT_ON_TIMER,
 	NOT_ON_TIMER,
 	NOT_ON_TIMER,
-	NOT_ON_TIMER,
+	TIMER0A,
 	NOT_ON_TIMER,
 	NOT_ON_TIMER,
 	NOT_ON_TIMER,
